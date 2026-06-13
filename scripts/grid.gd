@@ -37,19 +37,11 @@ var final_touch = Vector2.ZERO
 var is_controlling = false
 
 # === Temporizadores del ciclo destruir → colapsar → rellenar ===
-# Son nodos hijos de "grid"; el editor conecta sus señales "timeout" a este script.
 @onready var destroy_timer: Timer = $destroy_timer
 @onready var collapse_timer: Timer = $collapse_timer
 @onready var refill_timer: Timer = $refill_timer
 
-# === PUNTAJE (B1) y CONTADOR (B2) ===
-# Contrato sugerido para comunicarte con el HUD (top_ui.gd). No es obligatorio usar
-# señales, pero ayuda a mantener la UI desacoplada de la lógica del tablero:
-#   signal score_changed(nuevo_puntaje: int)
-#   signal counter_changed(restantes: int)        # movimientos o segundos, tú decides
-#   signal game_finished(gano: bool)
-# TODO (PARCIAL · B1/B2): declara aquí el puntaje y el contador (y sus señales, si las usas).
-
+# === B1: PUNTaje ===
 signal score_changed(new_score: int)
 var score: int = 0
 
@@ -178,15 +170,11 @@ func pixel_to_grid(pixel_x, pixel_y):
 func in_grid(column, row):
 	return column >= 0 and column < width and row >= 0 and row < height
 
-	
 func spawn_pieces():
 	for i in width:
 		for j in height:
-			# random number
 			var rand = randi_range(0, possible_pieces.size() - 1)
-			# instance 
 			var piece = possible_pieces[rand].instantiate()
-			# repeat until no matches
 			var max_loops = 100
 			var loops = 0
 			while (match_at(i, j, piece.color) and loops < max_loops):
@@ -195,17 +183,14 @@ func spawn_pieces():
 				piece = possible_pieces[rand].instantiate()
 			add_child(piece)
 			piece.position = grid_to_pixel(i, j)
-			# fill array with pieces
 			all_pieces[i][j] = piece
 
 func match_at(i, j, color):
-	# check left
 	if i > 1:
 		if all_pieces[i - 1][j] != null and all_pieces[i - 2][j] != null:
 			if all_pieces[i - 1][j].color == color and all_pieces[i - 2][j].color == color:
 				return true
-	# check down
-	if j> 1:
+	if j > 1:
 		if all_pieces[i][j - 1] != null and all_pieces[i][j - 2] != null:
 			if all_pieces[i][j - 1].color == color and all_pieces[i][j - 2].color == color:
 				return true
@@ -217,8 +202,6 @@ func touch_input():
 	if Input.is_action_just_pressed("ui_touch") and in_grid(grid_pos.x, grid_pos.y):
 		first_touch = grid_pos
 		is_controlling = true
-		
-	# release button
 	if Input.is_action_just_released("ui_touch") and in_grid(grid_pos.x, grid_pos.y) and is_controlling:
 		is_controlling = false
 		final_touch = grid_pos
@@ -260,7 +243,6 @@ func swap_back():
 
 func touch_difference(grid_1, grid_2):
 	var difference = grid_2 - grid_1
-	# should move x or y?
 	if abs(difference.x) > abs(difference.y):
 		if difference.x > 0:
 			swap_pieces(grid_1.x, grid_1.y, Vector2(1, 0))
@@ -272,18 +254,15 @@ func touch_difference(grid_1, grid_2):
 		elif difference.y < 0:
 			swap_pieces(grid_1.x, grid_1.y, Vector2(0, -1))
 
-func _process(delta):
+func _process(_delta):
 	if state == MOVE:
 		touch_input()
 
+# ============================================================
+# M3: Detección de combinaciones con soporte para 4 y 5 en línea
+# ============================================================
 func find_matches():
-	# TODO (PARCIAL · M3): aquí es donde se decide qué piezas forman cada combinación.
-	# Para crear piezas especiales necesitas conocer el LARGO de cada línea: una de 4
-	# genera una pieza de línea (fila/columna) y una de 5 una bomba de color. El chequeo
-	# actual solo mira el "centro" de tríos; probablemente tengas que recorrer las
-	# líneas completas para distinguir combinaciones de 3, 4 y 5.
-	
-		pending_specials = []
+	pending_specials = []
 	var matched_positions: Array = []
 	var horizontal_lines: Array = []
 	var vertical_lines: Array = []
@@ -382,7 +361,10 @@ func _upgrade_special(pos: Vector2i, new_type: String):
 		if s.pos == pos:
 			s.type = new_type
 			return
-	
+
+# ============================================================
+# B1: Destruir piezas combinadas + puntaje
+# ============================================================
 func destroy_matched():
 	var was_matched = false
 	var match_count = 0
@@ -430,7 +412,6 @@ func collapse_columns():
 	for i in width:
 		for j in height:
 			if all_pieces[i][j] == null:
-				# look above
 				for k in range(j + 1, height):
 					if all_pieces[i][k] != null:
 						all_pieces[i][k].move(grid_to_pixel(i, j))
@@ -440,15 +421,11 @@ func collapse_columns():
 	refill_timer.start()
 
 func refill_columns():
-	
 	for i in width:
 		for j in height:
 			if all_pieces[i][j] == null:
-				# random number
 				var rand = randi_range(0, possible_pieces.size() - 1)
-				# instance 
 				var piece = possible_pieces[rand].instantiate()
-				# repeat until no matches
 				var max_loops = 100
 				var loops = 0
 				while (match_at(i, j, piece.color) and loops < max_loops):
@@ -458,9 +435,7 @@ func refill_columns():
 				add_child(piece)
 				piece.position = grid_to_pixel(i, j - y_offset)
 				piece.move(grid_to_pixel(i, j))
-				# fill array with pieces
 				all_pieces[i][j] = piece
-				
 	check_after_refill()
 
 func check_after_refill():
@@ -478,8 +453,282 @@ func check_after_refill():
 	state = MOVE
 	move_checked = false
 
+# ============================================================
+# M1: Verificar objetivo del nivel
+# ============================================================
+func _check_level_objective():
+	var obj_tipo = level_config.get("objetivo_tipo", -1)
+	var obj_valor = level_config.get("objetivo_valor", 0)
+	var won = false
+
+	match obj_tipo:
+		LevelConfig.Objetivo.PUNTAJE:
+			won = score >= obj_valor
+		LevelConfig.Objetivo.RECOLECTAR_COLOR:
+			var count = collected_pieces.get(level_config.get("objetivo_color", ""), 0)
+			won = count >= obj_valor
+
+	if won:
+		_on_level_won()
+	elif moves_remaining <= 0:
+		_on_level_lost()
+
+func _on_level_won():
+	if score > best_score:
+		best_score = score
+	current_level += 1
+	if current_level >= LevelConfig.get_level_count():
+		current_level = 0
+	_save_progress()
+	game_finished.emit(true)
+	snd_victory.play()
+	_show_game_over(true)
+
+func _on_level_lost():
+	if score > best_score:
+		best_score = score
+	_save_progress()
+	game_finished.emit(false)
+	snd_gameover.play()
+	_show_game_over(false)
+
+# ============================================================
+# B2: Consumir jugada
+# ============================================================
+func _consume_move():
+	if moves_remaining > 0:
+		moves_remaining -= 1
+		counter_changed.emit(moves_remaining)
+
+# ============================================================
+# M3: Activar piezas especiales
+# ============================================================
+func _activate_specials(piece_a, piece_b):
+	var type_a = piece_a.special_type
+	var type_b = piece_b.special_type
+
+	if type_a != "" and type_b != "":
+		_combine_specials(piece_a, piece_b)
+	elif type_a != "":
+		_use_special(piece_a, piece_b)
+	else:
+		_use_special(piece_b, piece_a)
+
+	piece_a.matched = true
+	piece_a.dim()
+	piece_b.matched = true
+	piece_b.dim()
+
+	move_checked = true
+	destroy_timer.start()
+
+func _use_special(special_piece, target_piece):
+	match special_piece.special_type:
+		"row":
+			var r = _get_piece_row(special_piece)
+			if r >= 0:
+				for i in width:
+					if all_pieces[i][r] != null:
+						all_pieces[i][r].matched = true
+						all_pieces[i][r].dim()
+		"column":
+			var c = _get_piece_col(special_piece)
+			if c >= 0:
+				for j in height:
+					if all_pieces[c][j] != null:
+						all_pieces[c][j].matched = true
+						all_pieces[c][j].dim()
+		"rainbow":
+			var target_color = target_piece.color
+			for i in width:
+				for j in height:
+					if all_pieces[i][j] != null and all_pieces[i][j].color == target_color:
+						all_pieces[i][j].matched = true
+						all_pieces[i][j].dim()
+
+func _combine_specials(piece_a, piece_b):
+	_use_special(piece_a, piece_b)
+	_use_special(piece_b, piece_a)
+
+func _get_piece_row(piece: Node2D) -> int:
+	for j in height:
+		for i in width:
+			if all_pieces[i][j] == piece:
+				return j
+	return -1
+
+func _get_piece_col(piece: Node2D) -> int:
+	for i in width:
+		for j in height:
+			if all_pieces[i][j] == piece:
+				return i
+	return -1
+
+# ============================================================
+# M2: Detección de bloqueo + rebarajado
+# ============================================================
+func _check_board_lock():
+	if not _hay_jugadas_validas():
+		_rebarajar()
+
+func _hay_jugadas_validas() -> bool:
+	for i in width:
+		for j in height:
+			if i < width - 1:
+				_swap_in_array(i, j, i + 1, j)
+				var has_match = _board_has_match()
+				_swap_in_array(i, j, i + 1, j)
+				if has_match:
+					return true
+			if j < height - 1:
+				_swap_in_array(i, j, i, j + 1)
+				var has_match = _board_has_match()
+				_swap_in_array(i, j, i, j + 1)
+				if has_match:
+					return true
+	return false
+
+func _swap_in_array(c1, r1, c2, r2):
+	var temp = all_pieces[c1][r1]
+	all_pieces[c1][r1] = all_pieces[c2][r2]
+	all_pieces[c2][r2] = temp
+
+func _board_has_match() -> bool:
+	for i in width:
+		for j in height:
+			if all_pieces[i][j] != null:
+				var c = all_pieces[i][j].color
+				if i > 1 and all_pieces[i-1][j] != null and all_pieces[i-2][j] != null:
+					if all_pieces[i-1][j].color == c and all_pieces[i-2][j].color == c:
+						return true
+				if j > 1 and all_pieces[i][j-1] != null and all_pieces[i][j-2] != null:
+					if all_pieces[i][j-1].color == c and all_pieces[i][j-2].color == c:
+						return true
+	return false
+
+func _rebarajar():
+	var all_pcs: Array = []
+	for i in width:
+		for j in height:
+			if all_pieces[i][j] != null:
+				all_pcs.append(all_pieces[i][j])
+
+	var max_attempts = 100
+	for attempt in max_attempts:
+		all_pcs.shuffle()
+		var idx = 0
+		for i in width:
+			for j in height:
+				all_pieces[i][j] = all_pcs[idx]
+				all_pieces[i][j].position = grid_to_pixel(i, j)
+				idx += 1
+		if _hay_jugadas_validas():
+			return
+
+# ============================================================
+# B3: Game Over overlay + reinicio
+# ============================================================
+func _show_game_over(won: bool):
+	state = WAIT
+
+	game_over_overlay = CanvasLayer.new()
+	game_over_overlay.layer = 10
+
+	var bg = ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.75)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	game_over_overlay.add_child(bg)
+
+	var vbox = VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_CENTER)
+	vbox.offset_left = -150
+	vbox.offset_right = 150
+	vbox.offset_top = -120
+	vbox.offset_bottom = 120
+	vbox.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	vbox.grow_vertical = Control.GROW_DIRECTION_BOTH
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 20)
+	game_over_overlay.add_child(vbox)
+
+	var title = Label.new()
+	title.text = "¡Victoria!" if won else "Game Over"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 36)
+	vbox.add_child(title)
+
+	var score_lbl = Label.new()
+	score_lbl.text = "Puntaje: " + str(score)
+	score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	score_lbl.add_theme_font_size_override("font_size", 24)
+	vbox.add_child(score_lbl)
+
+	if level_config.get("objetivo_tipo", -1) == LevelConfig.Objetivo.RECOLECTAR_COLOR:
+		var obj_color = level_config.get("objetivo_color", "")
+		var count = collected_pieces.get(obj_color, 0)
+		var obj_valor = level_config.get("objetivo_valor", 0)
+		var obj_lbl = Label.new()
+		obj_lbl.text = obj_color + ": " + str(count) + " / " + str(obj_valor)
+		obj_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		obj_lbl.add_theme_font_size_override("font_size", 20)
+		vbox.add_child(obj_lbl)
+
+	var restart_btn = Button.new()
+	restart_btn.text = "Reiniciar"
+	restart_btn.custom_minimum_size = Vector2(200, 50)
+	restart_btn.pressed.connect(_on_restart_pressed)
+	vbox.add_child(restart_btn)
+
+	var next_btn = Button.new()
+	next_btn.text = "Siguiente Nivel"
+	next_btn.custom_minimum_size = Vector2(200, 50)
+	next_btn.visible = won
+	next_btn.pressed.connect(_on_next_level_pressed)
+	vbox.add_child(next_btn)
+
+	add_child(game_over_overlay)
+
+func _on_restart_pressed():
+	if game_over_overlay:
+		game_over_overlay.queue_free()
+		game_over_overlay = null
+	score = 0
+	combo_count = 0
+	_load_level()
+	_clear_board()
+	spawn_pieces()
+	state = MOVE
+	score_changed.emit(score)
+	counter_changed.emit(moves_remaining)
+	if get_parent().get_node_or_null("top_ui"):
+		get_parent().get_node("top_ui").set_level_info(level_config)
+
+func _on_next_level_pressed():
+	if game_over_overlay:
+		game_over_overlay.queue_free()
+		game_over_overlay = null
+	score = 0
+	combo_count = 0
+	_load_level()
+	_clear_board()
+	spawn_pieces()
+	state = MOVE
+	score_changed.emit(score)
+	counter_changed.emit(moves_remaining)
+	if get_parent().get_node_or_null("top_ui"):
+		get_parent().get_node("top_ui").set_level_info(level_config)
+
+func _clear_board():
+	for i in width:
+		for j in height:
+			if all_pieces[i][j] != null:
+				all_pieces[i][j].queue_free()
+				all_pieces[i][j] = null
+
 func _on_destroy_timer_timeout():
 	destroy_matched()
+
 
 func _on_collapse_timer_timeout():
 	collapse_columns()
