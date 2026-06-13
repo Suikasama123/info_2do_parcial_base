@@ -224,25 +224,25 @@ func touch_input():
 		final_touch = grid_pos
 		touch_difference(first_touch, final_touch)
 
-func swap_pieces(column, row, direction: Vector2):
+func swap_pieces(column, row, direction: Vector2, play_snd: bool = true):
 	var first_piece = all_pieces[column][row]
 	var other_piece = all_pieces[column + direction.x][row + direction.y]
 	if first_piece == null or other_piece == null:
 		return
-	# swap
 	state = WAIT
 	store_info(first_piece, other_piece, Vector2(column, row), direction)
 	all_pieces[column][row] = other_piece
 	all_pieces[column + direction.x][row + direction.y] = first_piece
-	#first_piece.position = grid_to_pixel(column + direction.x, row + direction.y)
-	#other_piece.position = grid_to_pixel(column, row)
 	first_piece.move(grid_to_pixel(column + direction.x, row + direction.y))
 	other_piece.move(grid_to_pixel(column, row))
-	# TODO (PARCIAL · M3): si alguna de las piezas intercambiadas es especial,
-	# actívala aquí (su efecto reemplaza a la búsqueda normal de combinaciones).
-	# TODO (PARCIAL · B2): un intercambio válido consume una jugada. Decide dónde
-	# descontar el contador: aquí, o en destroy_matched() solo si hubo combinación.
-	if not move_checked:
+
+	if play_snd:
+		snd_swap.play()
+
+	if first_piece.special_type != "" or other_piece.special_type != "":
+		combo_count = 0
+		_activate_specials(first_piece, other_piece)
+	elif not move_checked:
 		find_matches()
 
 func store_info(first_piece, other_piece, place, direction):
@@ -253,7 +253,8 @@ func store_info(first_piece, other_piece, place, direction):
 
 func swap_back():
 	if piece_one != null and piece_two != null:
-		swap_pieces(last_place.x, last_place.y, last_direction)
+		snd_invalid.play()
+		swap_pieces(last_place.x, last_place.y, last_direction, false)
 	state = MOVE
 	move_checked = false
 
@@ -281,57 +282,149 @@ func find_matches():
 	# genera una pieza de línea (fila/columna) y una de 5 una bomba de color. El chequeo
 	# actual solo mira el "centro" de tríos; probablemente tengas que recorrer las
 	# líneas completas para distinguir combinaciones de 3, 4 y 5.
-	for i in width:
-		for j in height:
+	
+		pending_specials = []
+	var matched_positions: Array = []
+	var horizontal_lines: Array = []
+	var vertical_lines: Array = []
+
+	for j in height:
+		var i = 0
+		while i < width:
 			if all_pieces[i][j] != null:
 				var current_color = all_pieces[i][j].color
-				# detect horizontal matches
-				if (
-					i > 0 and i < width -1 
-					and 
-					all_pieces[i - 1][j] != null and all_pieces[i + 1][j]
-					and 
-					all_pieces[i - 1][j].color == current_color and all_pieces[i + 1][j].color == current_color
-				):
-					all_pieces[i - 1][j].matched = true
-					all_pieces[i - 1][j].dim()
-					all_pieces[i][j].matched = true
-					all_pieces[i][j].dim()
-					all_pieces[i + 1][j].matched = true
-					all_pieces[i + 1][j].dim()
-				# detect vertical matches
-				if (
-					j > 0 and j < height -1 
-					and 
-					all_pieces[i][j - 1] != null and all_pieces[i][j + 1]
-					and 
-					all_pieces[i][j - 1].color == current_color and all_pieces[i][j + 1].color == current_color
-				):
-					all_pieces[i][j - 1].matched = true
-					all_pieces[i][j - 1].dim()
-					all_pieces[i][j].matched = true
-					all_pieces[i][j].dim()
-					all_pieces[i][j + 1].matched = true
-					all_pieces[i][j + 1].dim()
-					
+				var line_length = 1
+				var k = i + 1
+				while k < width and all_pieces[k][j] != null and all_pieces[k][j].color == current_color:
+					line_length += 1
+					k += 1
+				if line_length >= 3:
+					horizontal_lines.append({"start": Vector2i(i, j), "length": line_length})
+					for m in range(i, i + line_length):
+						var pos = Vector2i(m, j)
+						if not _pos_in_array(pos, matched_positions):
+							matched_positions.append(pos)
+				i = k
+			else:
+				i += 1
+
+	for i in width:
+		var j = 0
+		while j < height:
+			if all_pieces[i][j] != null:
+				var current_color = all_pieces[i][j].color
+				var line_length = 1
+				var k = j + 1
+				while k < height and all_pieces[i][k] != null and all_pieces[i][k].color == current_color:
+					line_length += 1
+					k += 1
+				if line_length >= 3:
+					vertical_lines.append({"start": Vector2i(i, j), "length": line_length})
+					for m in range(j, j + line_length):
+						var pos = Vector2i(i, m)
+						if not _pos_in_array(pos, matched_positions):
+							matched_positions.append(pos)
+				j = k
+			else:
+				j += 1
+
+	for line in horizontal_lines:
+		if line.length >= 5:
+			var pos = Vector2i(line.start.x + 2, line.start.y)
+			if not _special_at_pos(pos):
+				pending_specials.append({"pos": pos, "type": "rainbow"})
+		elif line.length == 4:
+			var pos = Vector2i(line.start.x + 1, line.start.y)
+			if not _special_at_pos(pos):
+				pending_specials.append({"pos": pos, "type": "row"})
+
+	for line in vertical_lines:
+		if line.length >= 5:
+			var pos = Vector2i(line.start.x, line.start.y + 2)
+			if not _special_at_pos(pos):
+				pending_specials.append({"pos": pos, "type": "rainbow"})
+			else:
+				_upgrade_special(pos, "rainbow")
+		elif line.length == 4:
+			var pos = Vector2i(line.start.x, line.start.y + 1)
+			if not _special_at_pos(pos):
+				pending_specials.append({"pos": pos, "type": "column"})
+			else:
+				_upgrade_special(pos, "column")
+
+	for pos in matched_positions:
+		if all_pieces[pos.x][pos.y] != null:
+			all_pieces[pos.x][pos.y].matched = true
+			all_pieces[pos.x][pos.y].dim()
+
+	for special in pending_specials:
+		var piece = all_pieces[special.pos.x][special.pos.y]
+		if piece != null:
+			piece.matched = false
+			piece.set_special(special.type)
+
 	destroy_timer.start()
+
+func _pos_in_array(pos: Vector2i, array: Array) -> bool:
+	for p in array:
+		if p == pos:
+			return true
+	return false
+
+func _special_at_pos(pos: Vector2i) -> bool:
+	for s in pending_specials:
+		if s.pos == pos:
+			return true
+	return false
+
+func _upgrade_special(pos: Vector2i, new_type: String):
+	for s in pending_specials:
+		if s.pos == pos:
+			s.type = new_type
+			return
 	
 func destroy_matched():
 	var was_matched = false
+	var match_count = 0
 	for i in width:
 		for j in height:
 			if all_pieces[i][j] != null and all_pieces[i][j].matched:
 				was_matched = true
-				# TODO (PARCIAL · B1): suma puntaje por cada pieza destruida (o por
-				# combinación) y emite score_changed para actualizar el HUD.
-				all_pieces[i][j].queue_free()
+				match_count += 1
+				var piece = all_pieces[i][j]
+				if level_config.get("objetivo_tipo", -1) == LevelConfig.Objetivo.RECOLECTAR_COLOR:
+					var obj_color = level_config.get("objetivo_color", "")
+					if piece.color == obj_color:
+						if not collected_pieces.has(piece.color):
+							collected_pieces[piece.color] = 0
+						collected_pieces[piece.color] += 1
+				piece.queue_free()
 				all_pieces[i][j] = null
+
+	if was_matched:
+		var points = match_count * 50
+		var multiplier = 1.0 + combo_count * 0.5
+		score += int(points * multiplier)
+		score_changed.emit(score)
+		_consume_move()
+		if level_config.get("objetivo_tipo", -1) == LevelConfig.Objetivo.RECOLECTAR_COLOR:
+			var obj_color = level_config.get("objetivo_color", "")
+			var count = collected_pieces.get(obj_color, 0)
+			var target = level_config.get("objetivo_valor", 0)
+			objective_progress.emit(count, target)
+
+	if pending_specials.size() > 0:
+		snd_special.play()
+	elif was_matched:
+		snd_match.play()
 
 	move_checked = true
 	if was_matched:
 		collapse_timer.start()
 	else:
-		swap_back()
+		combo_count = 0
+		if state == WAIT:
+			swap_back()
 
 func collapse_columns():
 	for i in width:
@@ -374,14 +467,14 @@ func check_after_refill():
 	for i in width:
 		for j in height:
 			if all_pieces[i][j] != null and match_at(i, j, all_pieces[i][j].color):
+				combo_count += 1
 				find_matches()
 				destroy_timer.start()
 				return
-	# El tablero quedó estable: no hay más combinaciones en cascada.
-	# TODO (PARCIAL · M1): verifica si se cumplió o falló el objetivo del nivel
-	# (puntaje meta, piezas recolectadas, etc.) y dispara victoria o derrota.
-	# TODO (PARCIAL · M2): comprueba si todavía existe alguna jugada válida; si no,
-	# rebaraja el tablero hasta que haya al menos una.
+
+	combo_count = 0
+	_check_level_objective()
+	_check_board_lock()
 	state = MOVE
 	move_checked = false
 
