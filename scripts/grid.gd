@@ -729,20 +729,12 @@ func _clear_board():
 func _on_destroy_timer_timeout():
 	destroy_matched()
 
-
 func _on_collapse_timer_timeout():
 	collapse_columns()
 
 func _on_refill_timer_timeout():
 	refill_columns()
-	
+
 func game_over():
 	state = WAIT
-	# TODO (PARCIAL · B3): muestra la pantalla final (victoria o derrota), detén la
-	# entrada del jugador y ofrece reiniciar la partida. Emite game_finished(gano).
-	# TODO (PARCIAL · M4): guarda el progreso (nivel alcanzado) y el mejor puntaje
-	# en disco (user://) para conservarlos entre sesiones.
-
-# TODO (PARCIAL · M2): funciones sugeridas para detectar el bloqueo del tablero.
-# func hay_jugadas_validas() -> bool:
-# func rebarajar() -> void:
+	_show_game_over(false)
