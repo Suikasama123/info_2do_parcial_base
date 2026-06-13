@@ -50,13 +50,85 @@ var is_controlling = false
 #   signal game_finished(gano: bool)
 # TODO (PARCIAL · B1/B2): declara aquí el puntaje y el contador (y sus señales, si las usas).
 
+signal score_changed(new_score: int)
+var score: int = 0
 
-# Called when the node enters the scene tree for the first time.
+# === B2: CONTADOR de movimientos ===
+signal counter_changed(remaining: int)
+var moves_remaining: int = 20
+
+# === B3: Game finished ===
+signal game_finished(won: bool)
+
+# === M1: Sistema de niveles ===
+signal objective_progress(current: int, target: int)
+var current_level: int = 0
+var level_config: Dictionary = {}
+var collected_pieces: Dictionary = {}
+
+# === M4: Persistencia ===
+var best_score: int = 0
+
+# === B4: Sonidos ===
+var snd_swap: AudioStreamPlayer
+var snd_match: AudioStreamPlayer
+var snd_invalid: AudioStreamPlayer
+var snd_special: AudioStreamPlayer
+var snd_victory: AudioStreamPlayer
+var snd_gameover: AudioStreamPlayer
+
+# === M3: Piezas especiales pendientes de crear ===
+var pending_specials: Array = []
+
+# === Combo (cascada) ===
+var combo_count: int = 0
+
+# === UI overlay para game over ===
+var game_over_overlay: CanvasLayer = null
+
 func _ready():
 	state = MOVE
 	randomize()
 	all_pieces = make_2d_array()
+	_init_sounds()
+	_load_progress()
+	_load_level()
 	spawn_pieces()
+	call_deferred("_connect_ui")
+
+func _init_sounds():
+	snd_swap = AudioStreamPlayer.new()
+	snd_swap.stream = load("res://assets/sounds/Match 3 Sounds/Sounds/1.ogg")
+	add_child(snd_swap)
+
+	snd_match = AudioStreamPlayer.new()
+	snd_match.stream = load("res://assets/sounds/Match 3 Sounds/Sounds/3.ogg")
+	add_child(snd_match)
+
+	snd_invalid = AudioStreamPlayer.new()
+	snd_invalid.stream = load("res://assets/sounds/Match 3 Sounds/Sounds/4.ogg")
+	add_child(snd_invalid)
+
+	snd_special = AudioStreamPlayer.new()
+	snd_special.stream = load("res://assets/sounds/Match 3 Sounds/Sounds/5.ogg")
+	add_child(snd_special)
+
+	snd_victory = AudioStreamPlayer.new()
+	snd_victory.stream = load("res://assets/sounds/Match 3 Sounds/Sounds/7.ogg")
+	add_child(snd_victory)
+
+	snd_gameover = AudioStreamPlayer.new()
+	snd_gameover.stream = load("res://assets/sounds/Match 3 Sounds/Sounds/6.ogg")
+	add_child(snd_gameover)
+
+func _connect_ui():
+	var ui = get_parent().get_node("top_ui")
+	if ui:
+		score_changed.connect(ui.update_score)
+		counter_changed.connect(ui.update_counter)
+		game_finished.connect(ui.update_game_over)
+		objective_progress.connect(ui.update_objective_progress)
+		ui.set_level_info(level_config)
 
 func make_2d_array():
 	var array = []
