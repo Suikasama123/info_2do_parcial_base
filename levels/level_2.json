@@ -1,0 +1,9 @@
+{
+	"nombre": "Nivel 3",
+	"objetivo_tipo": 0,
+	"objetivo_valor": 2500,
+	"objetivo_color": "",
+	"limite_movimientos": 30,
+	"limite_segundos": 0,
+	"colores": ["blue", "green", "light_green", "pink", "yellow", "orange"]
+}
