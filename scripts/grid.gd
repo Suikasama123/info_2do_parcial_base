@@ -58,6 +58,33 @@ func _ready():
 	all_pieces = make_2d_array()
 	spawn_pieces()
 
+func _load_progress():
+	var save_path = "user://save_game.json"
+	if FileAccess.file_exists(save_path):
+		var file = FileAccess.open(save_path, FileAccess.READ)
+		var json = JSON.new()
+		var err = json.parse(file.get_as_text())
+		file.close()
+		if err == OK:
+			current_level = json.data.get("current_level", 0)
+			best_score = json.data.get("best_score", 0)
+
+func _save_progress():
+	var save_data = {
+		"current_level": current_level,
+		"best_score": best_score,
+	}
+	var file = FileAccess.open("user://save_game.json", FileAccess.WRITE)
+	file.store_string(JSON.stringify(save_data))
+	file.close()
+
+func _load_level():
+	level_config = LevelConfig.get_level(current_level)
+	moves_remaining = level_config["limite_movimientos"]
+	collected_pieces = {}
+	combo_count = 0
+	score = 0
+
 func make_2d_array():
 	var array = []
 	for i in width:
@@ -65,19 +92,20 @@ func make_2d_array():
 		for j in height:
 			array[i].append(null)
 	return array
-	
+
 func grid_to_pixel(column, row):
 	var new_x = x_start + offset * column
 	var new_y = y_start - offset * row
 	return Vector2(new_x, new_y)
-	
+
 func pixel_to_grid(pixel_x, pixel_y):
 	var new_x = round((pixel_x - x_start) / offset)
 	var new_y = round((pixel_y - y_start) / -offset)
 	return Vector2(new_x, new_y)
-	
+
 func in_grid(column, row):
 	return column >= 0 and column < width and row >= 0 and row < height
+
 	
 func spawn_pieces():
 	for i in width:
