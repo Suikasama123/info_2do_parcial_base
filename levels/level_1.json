@@ -1,0 +1,9 @@
+{
+	"nombre": "Nivel 2",
+	"objetivo_tipo": 1,
+	"objetivo_valor": 15,
+	"objetivo_color": "blue",
+	"limite_movimientos": 25,
+	"limite_segundos": 0,
+	"colores": ["blue", "green", "light_green", "pink", "yellow", "orange"]
+}
