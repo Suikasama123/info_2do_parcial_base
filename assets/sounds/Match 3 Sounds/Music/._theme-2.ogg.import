@@ -1,0 +1,18 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://c6oe275lvp2gc"
+valid=false
+
+[deps]
+
+source_file="res://assets/sounds/Match 3 Sounds/Music/._theme-2.ogg"
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
